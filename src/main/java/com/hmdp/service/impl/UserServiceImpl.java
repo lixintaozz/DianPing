@@ -47,6 +47,38 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
 
     @Override
     public Result sendCode(String phone, HttpSession session) {
+        //1. 首先检验手机号码是否合法
+        boolean invalid = RegexUtils.isPhoneInvalid(phone);
+
+        //2. 如果不合法，直接返回错误信息
+        if (invalid)
+            return Result.fail("手机号无效");
+
+        //3. 随机生成一个验证码，并将其保存至session
+        String numbers = RandomUtil.randomNumbers(6);
+        session.setAttribute("code", numbers);
+
+        //4. 将验证码发送给用户(此处只做模拟)
+        log.debug("将验证码发送给用户：{}", numbers);
+
+        //5. 返回结果
+        return Result.ok();
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+    /*    @Override
+    public Result sendCode(String phone, HttpSession session) {
         // 1.校验手机号
         if (RegexUtils.isPhoneInvalid(phone)) {
             // 2.如果不符合，返回错误信息
@@ -62,7 +94,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
         log.debug("发送短信验证码成功，验证码：{}", code);
         // 返回ok
         return Result.ok();
-    }
+    }*/
 
     @Override
     public Result login(LoginFormDTO loginForm, HttpSession session) {
