@@ -2,6 +2,7 @@ package com.hmdp.service.impl;
 
 import cn.hutool.core.util.RandomUtil;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.hmdp.dto.LoginFormDTO;
 import com.hmdp.dto.Result;
 import com.hmdp.entity.User;
 import com.hmdp.mapper.UserMapper;
@@ -45,5 +46,25 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
 
         // 4. 返回Result.ok()
         return Result.ok();
+    }
+
+    /**
+     * 用户登录
+     * @param loginForm
+     * @param session
+     * @return
+     */
+    @Override
+    public Result login(LoginFormDTO loginForm, HttpSession session) {
+        //1. 检查手机号是否合法，不合法则返回Result.fail();
+
+        //2. 检验验证码是否有效，无效则返回Result.fail();
+
+        //3. 检查用户是否存在，如果不存在需要插入用户数据
+
+        //4. 将用户数据保存至session
+
+        //5. 返回ok
+        return null;
     }
 }
