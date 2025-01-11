@@ -73,6 +73,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
         if (user == null) {
             user = new User();
             user.setPhone(loginForm.getPhone());
+            user.setNickName("user_" + RandomUtil.randomString(10));
             user.setPassword(loginForm.getPassword());
             this.save(user);
         }
