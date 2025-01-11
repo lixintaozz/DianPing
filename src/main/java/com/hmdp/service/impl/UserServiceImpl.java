@@ -1,14 +1,18 @@
 package com.hmdp.service.impl;
 
+import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.util.RandomUtil;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.hmdp.dto.LoginFormDTO;
 import com.hmdp.dto.Result;
+import com.hmdp.dto.UserDTO;
 import com.hmdp.entity.User;
+import com.hmdp.entity.UserInfo;
 import com.hmdp.mapper.UserMapper;
 import com.hmdp.service.IUserService;
 import com.hmdp.utils.RegexUtils;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 
 import javax.servlet.http.HttpSession;
@@ -57,14 +61,26 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
     @Override
     public Result login(LoginFormDTO loginForm, HttpSession session) {
         //1. 检查手机号是否合法，不合法则返回Result.fail();
+        if (RegexUtils.isPhoneInvalid(loginForm.getPhone()))
+            return Result.fail("手机号格式无效!");
 
         //2. 检验验证码是否有效，无效则返回Result.fail();
+        if (!loginForm.getCode().equals(session.getAttribute("code")))
+            return Result.fail("验证码错误！");
 
         //3. 检查用户是否存在，如果不存在需要插入用户数据
+        User user = this.lambdaQuery().eq(User::getPhone, loginForm.getPhone()).one();
+        if (user == null) {
+            user = new User();
+            user.setPhone(loginForm.getPhone());
+            user.setPassword(loginForm.getPassword());
+            this.save(user);
+        }
 
         //4. 将用户数据保存至session
+        session.setAttribute("userInfo", BeanUtil.copyProperties(user, UserDTO.class));
 
         //5. 返回ok
-        return null;
+        return Result.ok();
     }
 }
