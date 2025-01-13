@@ -58,7 +58,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
         String key = RedisConstants.LOGIN_CODE_KEY + phone;
         stringRedisTemplate.opsForValue().set(key, code, RedisConstants.LOGIN_CODE_TTL, TimeUnit.MINUTES);
 
-        // 3. 将验证码发送给用户，此处仅做模拟
+        // 3. 将验证码发送给用户，此处仅做模拟，实际需要使用阿里云相关服务
         log.info("验证码成功发送至用户：{}", code);
 
         // 4. 返回Result.ok()
