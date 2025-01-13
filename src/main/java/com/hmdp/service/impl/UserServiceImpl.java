@@ -78,7 +78,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
             return Result.fail("手机号格式无效!");
 
         //2. 检验验证码是否有效，无效则返回Result.fail();
-        String code = stringRedisTemplate.opsForValue().get(RedisConstants.LOGIN_CODE_KEY);
+        String code = stringRedisTemplate.opsForValue().get(RedisConstants.LOGIN_CODE_KEY + loginForm.getPhone());
         if (!loginForm.getCode().equals(code))
             return Result.fail("验证码错误！");
 
@@ -93,7 +93,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
         }
 
         //4. 将用户数据保存至redis
-        String key = RedisConstants.LOGIN_USER_KEY + UUID.randomUUID().toString();
+        String key = RedisConstants.LOGIN_USER_KEY + UUID.randomUUID();
         UserDTO userDTO = BeanUtil.copyProperties(user, UserDTO.class);
         Map<String, Object> stringObjectMap = BeanUtil.beanToMap(userDTO, new HashMap<>(),
                 new CopyOptions().ignoreNullValue().setFieldValueEditor((field, value) -> value.toString()));
