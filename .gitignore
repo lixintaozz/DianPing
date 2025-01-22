@@ -19,6 +19,9 @@ target/
 *.iml
 *.ipr
 
+### Nginx
+nginx-1.18.0/
+
 ### NetBeans ###
 /nbproject/private/
 /nbbuild/
