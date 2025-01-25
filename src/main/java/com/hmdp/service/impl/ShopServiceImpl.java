@@ -13,9 +13,11 @@ import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 /**
  * <p>
@@ -58,6 +60,25 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
                     return value.toString();
                 }));
         stringRedisTemplate.opsForHash().putAll(key, stringObjectMap);
+        stringRedisTemplate.expire(key, RedisConstants.CACHE_SHOP_TTL, TimeUnit.MINUTES);
         return Result.ok(shop);
+    }
+
+    /**
+     * 更新商铺信息
+     * @param shop
+     * @return
+     */
+    @Override
+    @Transactional
+    public Result updateShop(Shop shop) {
+        if (shop.getId() == null)
+            return Result.fail("商铺id不存在!");
+
+        //1. 先更新数据库
+        updateById(shop);
+        //2. 再删除缓存
+        stringRedisTemplate.delete(RedisConstants.CACHE_SHOP_KEY + shop.getId());
+        return Result.ok();
     }
 }
