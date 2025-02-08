@@ -2,6 +2,7 @@ package com.hmdp.service.impl;
 
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.bean.copier.CopyOptions;
+import cn.hutool.core.lang.hash.Hash;
 import cn.hutool.json.JSONUtil;
 import com.hmdp.dto.Result;
 import com.hmdp.entity.Shop;
@@ -45,13 +46,20 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
         Shop shop;
         if (!entries.isEmpty())
         {
+            if (entries.size() == 1 && entries.containsKey(""))
+                return Result.fail("商铺信息不存在！");
             shop = BeanUtil.fillBeanWithMap(entries, new Shop(), false);
             return Result.ok(shop);
         }
 
+
         shop = getById(id);
-        if (shop == null)
+        if (shop == null) {
+            Map<String, String> objectHash = new HashMap<>();
+            objectHash.put("", "");
+            stringRedisTemplate.opsForHash().putAll(key, objectHash);
             return Result.fail("商铺不存在！");
+        }
 
         Map<String, Object> stringObjectMap = BeanUtil.beanToMap(shop, new HashMap<>(), CopyOptions.create()
                 .ignoreNullValue().setFieldValueEditor((field, value) ->{

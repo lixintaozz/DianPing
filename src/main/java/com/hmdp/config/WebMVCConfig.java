@@ -38,7 +38,12 @@ public class WebMVCConfig implements WebMvcConfigurer {
                         "/upload/**",
                         "/blog/hot",
                         "/user/code",
-                        "/user/login"
+                        "/user/login",
+                        "/swagger-resources/**",
+                        "/doc.html",
+                        "/webjars/**",
+                        "/v2/**",
+                        "/swagger-ui.html/**"
                 )
                 .order(1);
     }
