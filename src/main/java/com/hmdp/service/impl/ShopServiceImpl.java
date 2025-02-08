@@ -3,6 +3,7 @@ package com.hmdp.service.impl;
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.bean.copier.CopyOptions;
 import cn.hutool.core.lang.hash.Hash;
+import cn.hutool.core.util.BooleanUtil;
 import cn.hutool.json.JSONUtil;
 import com.hmdp.dto.Result;
 import com.hmdp.entity.Shop;
@@ -41,15 +42,108 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
      */
     @Override
     public Result queryShopById(Long id) {
+        //解决了缓存穿透的问题
+        //Shop shop = queryWithThrough(id);
+
+        //使用互斥锁解决缓存击穿问题
+        Shop shop = queryWithHitThrough(id);
+        if (shop == null)
+            return Result.fail("商铺不存在！");
+        return Result.ok(shop);
+    }
+
+    /**
+     * 使用互斥锁解决了缓存击穿问题的查询
+     * @param id
+     * @return
+     */
+    private Shop queryWithHitThrough(Long id)
+    {
         String key = RedisConstants.CACHE_SHOP_KEY + id;
         Map<Object, Object> entries = stringRedisTemplate.opsForHash().entries(key);
         Shop shop;
         if (!entries.isEmpty())
         {
             if (entries.size() == 1 && entries.containsKey(""))
-                return Result.fail("商铺信息不存在！");
+                return null;
             shop = BeanUtil.fillBeanWithMap(entries, new Shop(), false);
-            return Result.ok(shop);
+            return shop;
+        }
+
+        String mutex = "shop:lock:" + id;
+        try {
+            boolean tryLock = tryLock(mutex);
+            if (!tryLock) {
+                Thread.sleep(50);
+                return queryWithThrough(id);
+            }
+
+            shop = getById(id);
+            //模拟重建的延时
+            Thread.sleep(200);
+
+            if (shop == null) {
+                Map<String, String> objectHash = new HashMap<>();
+                objectHash.put("", "");
+                stringRedisTemplate.opsForHash().putAll(key, objectHash);
+                //为空值设置过期时间
+                stringRedisTemplate.expire(key, RedisConstants.CACHE_NULL_TTL, TimeUnit.MINUTES);
+                return null;
+            }
+
+            Map<String, Object> stringObjectMap = BeanUtil.beanToMap(shop, new HashMap<>(), CopyOptions.create()
+                    .ignoreNullValue().setFieldValueEditor((field, value) ->{
+                        if (value == null)
+                            return null;
+                        return value.toString();
+                    }));
+            stringRedisTemplate.opsForHash().putAll(key, stringObjectMap);
+            stringRedisTemplate.expire(key, RedisConstants.CACHE_SHOP_TTL, TimeUnit.MINUTES);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
+        Unlock(mutex);
+        return shop;
+    }
+
+    /**
+     * 尝试加锁
+     * @param key
+     * @return
+     */
+    private boolean tryLock(String key)
+    {
+        Boolean aBoolean = stringRedisTemplate.opsForValue().setIfAbsent(key, "1", 20, TimeUnit.SECONDS);
+        return BooleanUtil.isTrue(aBoolean);
+    }
+
+    /**
+     * 删除锁
+     * @param key
+     */
+    private void Unlock(String key)
+    {
+        Boolean delete = stringRedisTemplate.delete(key);
+    }
+
+
+
+    /**
+     * 解决了缓存穿透问题的查询
+     * @param id
+     * @return
+     */
+    private Shop queryWithThrough(Long id)
+    {
+        String key = RedisConstants.CACHE_SHOP_KEY + id;
+        Map<Object, Object> entries = stringRedisTemplate.opsForHash().entries(key);
+        Shop shop;
+        if (!entries.isEmpty())
+        {
+            if (entries.size() == 1 && entries.containsKey(""))
+                return null;
+            shop = BeanUtil.fillBeanWithMap(entries, new Shop(), false);
+            return shop;
         }
 
 
@@ -58,7 +152,9 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
             Map<String, String> objectHash = new HashMap<>();
             objectHash.put("", "");
             stringRedisTemplate.opsForHash().putAll(key, objectHash);
-            return Result.fail("商铺不存在！");
+            //为空值设置过期时间
+            stringRedisTemplate.expire(key, RedisConstants.CACHE_NULL_TTL, TimeUnit.MINUTES);
+            return null;
         }
 
         Map<String, Object> stringObjectMap = BeanUtil.beanToMap(shop, new HashMap<>(), CopyOptions.create()
@@ -69,7 +165,7 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
                 }));
         stringRedisTemplate.opsForHash().putAll(key, stringObjectMap);
         stringRedisTemplate.expire(key, RedisConstants.CACHE_SHOP_TTL, TimeUnit.MINUTES);
-        return Result.ok(shop);
+        return shop;
     }
 
     /**
