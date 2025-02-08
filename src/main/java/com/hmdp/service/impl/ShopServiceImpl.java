@@ -78,9 +78,17 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
                 return queryWithThrough(id);
             }
 
+            //Double check，如果此时缓存已经存在，则无需再重建缓存
+            entries = stringRedisTemplate.opsForHash().entries(key);
+            if (!entries.isEmpty())
+            {
+                if (entries.size() == 1 && entries.containsKey(""))
+                    return null;
+                shop = BeanUtil.fillBeanWithMap(entries, new Shop(), false);
+                return shop;
+            }
+
             shop = getById(id);
-            //模拟重建的延时
-            Thread.sleep(200);
 
             if (shop == null) {
                 Map<String, String> objectHash = new HashMap<>();
@@ -102,6 +110,7 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
         }
+
         Unlock(mutex);
         return shop;
     }
