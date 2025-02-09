@@ -106,17 +106,17 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
             if (expireTime.isAfter(LocalDateTime.now()))
                 return shop1;
 
-            try {
-                //开启独立线程重建缓存
-                CACHE_REBUILD_EXCUTER.submit(() -> {
-                   saveShop2Redis(id, 30L);
-                });
-            } catch (Exception e) {
-                throw new RuntimeException(e);
-            } finally {
-                //释放锁
-                Unlock(RedisConstants.LOCK_SHOP_KEY + id);
-            }
+            //开启独立线程重建缓存
+            CACHE_REBUILD_EXCUTER.submit(() -> {
+                try {
+                    saveShop2Redis(id, 30L);
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                } finally {
+                    //释放锁
+                    Unlock(RedisConstants.LOCK_SHOP_KEY + id);
+                }
+            });
         }
 
         //如果获取锁失败，返回旧数据
