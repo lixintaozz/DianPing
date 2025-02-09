@@ -43,7 +43,7 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
     private StringRedisTemplate stringRedisTemplate;
 
     //构建线程池
-    private static final ExecutorService CACHE_REBUILD_EXCUTER = Executors.newFixedThreadPool(10);
+    private static final ExecutorService CACHE_REBUILD_EXECUTOR = Executors.newFixedThreadPool(10);
 
     /**
      * 根据id查询商铺（基于Redis实现）
@@ -107,7 +107,7 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
                 return shop1;
 
             //开启独立线程重建缓存
-            CACHE_REBUILD_EXCUTER.submit(() -> {
+            CACHE_REBUILD_EXECUTOR.submit(() -> {
                 try {
                     saveShop2Redis(id, 30L);
                 } catch (Exception e) {
