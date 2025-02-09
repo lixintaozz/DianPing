@@ -6,6 +6,7 @@ import cn.hutool.core.lang.hash.Hash;
 import cn.hutool.core.util.BooleanUtil;
 import cn.hutool.json.JSONUtil;
 import com.hmdp.dto.Result;
+import com.hmdp.entity.RedisData;
 import com.hmdp.entity.Shop;
 import com.hmdp.mapper.ShopMapper;
 import com.hmdp.service.IShopService;
@@ -17,6 +18,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -46,10 +48,68 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
         //Shop shop = queryWithThrough(id);
 
         //使用互斥锁解决缓存击穿问题
-        Shop shop = queryWithHitThrough(id);
+        //Shop shop = queryWithHitThrough(id);
+
+        //使用逻辑过期解决缓存击穿问题
+        Shop shop = queryWithLogicalExpire(id);
         if (shop == null)
             return Result.fail("商铺不存在！");
         return Result.ok(shop);
+    }
+
+    /**
+     * 使用逻辑过期来解决缓存击穿
+     * @param id
+     * @return
+     */
+    public Shop queryWithLogicalExpire(Long id)
+    {
+        String key = RedisConstants.CACHE_SHOP_KEY + id;
+        Map<Object, Object> entries = stringRedisTemplate.opsForHash().entries(key);
+        Shop shop;
+        if (!entries.isEmpty())
+        {
+            if (entries.size() == 1 && entries.containsKey(""))
+                return null;
+            shop = BeanUtil.fillBeanWithMap(entries, new Shop(), false);
+            return shop;
+        }
+
+
+        shop = getById(id);
+        if (shop == null) {
+            Map<String, String> objectHash = new HashMap<>();
+            objectHash.put("", "");
+            stringRedisTemplate.opsForHash().putAll(key, objectHash);
+            //为空值设置过期时间
+            stringRedisTemplate.expire(key, RedisConstants.CACHE_NULL_TTL, TimeUnit.MINUTES);
+            return null;
+        }
+
+        Map<String, Object> stringObjectMap = BeanUtil.beanToMap(shop, new HashMap<>(), CopyOptions.create()
+                .ignoreNullValue().setFieldValueEditor((field, value) ->{
+                    if (value == null)
+                        return null;
+                    return value.toString();
+                }));
+        stringRedisTemplate.opsForHash().putAll(key, stringObjectMap);
+        stringRedisTemplate.expire(key, RedisConstants.CACHE_SHOP_TTL, TimeUnit.MINUTES);
+        return shop;
+    }
+
+    /**
+     * 将商铺数据添加到Redis缓存
+     * @param id
+     * @param duration
+     */
+    public void saveShop2Redis(Long id, Long duration)
+    {
+        String key = RedisConstants.CACHE_SHOP_KEY + id;
+        Shop shop = getById(id);
+        RedisData redisData = new RedisData();
+        redisData.setData(shop);
+        redisData.setExpireTime(LocalDateTime.now().plusSeconds(duration));
+        stringRedisTemplate.opsForValue().set(key, JSONUtil.toJsonStr(redisData));
     }
 
     /**
