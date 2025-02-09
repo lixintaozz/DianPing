@@ -54,6 +54,7 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
         iSeckillVoucherService.lambdaUpdate()
                               .setSql("stock = stock - 1")
                               .eq(SeckillVoucher::getVoucherId, voucherId)
+                              .gt(SeckillVoucher::getStock, 0)
                               .update();
         //6. 创建订单并保存
         VoucherOrder voucherOrder = new VoucherOrder();
