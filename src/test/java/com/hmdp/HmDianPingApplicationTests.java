@@ -2,12 +2,13 @@ package com.hmdp;
 
 import com.hmdp.service.IShopService;
 import com.hmdp.service.impl.ShopServiceImpl;
+import com.hmdp.utils.RedisIDWorker;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
 
-//@SpringBootTest
+@SpringBootTest
 class HmDianPingApplicationTests {
     /*
     知识点：因为ShopServiceImpl中使用了@Transactional注解，所以生成的Bean对象是一个动态代理对象
@@ -19,12 +20,22 @@ class HmDianPingApplicationTests {
      */
 
 
-    //@Autowired
+    @Autowired
     private IShopService shopService;
+    @Autowired
+    private RedisIDWorker redisIDWorker;
 
-    //@Test
+    @Test
     void save(){
         shopService.saveShop2Redis(5L, 20L);
     }
+
+    @Test
+    void generate()
+    {
+        for (int i = 0; i < 100; ++ i)
+            System.out.println(redisIDWorker.nextId("shop"));
+    }
+
 
 }
