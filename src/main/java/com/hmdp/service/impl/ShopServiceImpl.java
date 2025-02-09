@@ -4,6 +4,8 @@ import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.bean.copier.CopyOptions;
 import cn.hutool.core.lang.hash.Hash;
 import cn.hutool.core.util.BooleanUtil;
+import cn.hutool.core.util.StrUtil;
+import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
 import com.hmdp.dto.Result;
 import com.hmdp.entity.RedisData;
@@ -21,6 +23,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -36,6 +41,9 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
 
     @Autowired
     private StringRedisTemplate stringRedisTemplate;
+
+    //构建线程池
+    private static final ExecutorService CACHE_REBUILD_EXCUTER = Executors.newFixedThreadPool(10);
 
     /**
      * 根据id查询商铺（基于Redis实现）
@@ -65,35 +73,53 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
     public Shop queryWithLogicalExpire(Long id)
     {
         String key = RedisConstants.CACHE_SHOP_KEY + id;
-        Map<Object, Object> entries = stringRedisTemplate.opsForHash().entries(key);
-        Shop shop;
-        if (!entries.isEmpty())
-        {
-            if (entries.size() == 1 && entries.containsKey(""))
-                return null;
-            shop = BeanUtil.fillBeanWithMap(entries, new Shop(), false);
-            return shop;
-        }
-
-
-        shop = getById(id);
-        if (shop == null) {
-            Map<String, String> objectHash = new HashMap<>();
-            objectHash.put("", "");
-            stringRedisTemplate.opsForHash().putAll(key, objectHash);
-            //为空值设置过期时间
-            stringRedisTemplate.expire(key, RedisConstants.CACHE_NULL_TTL, TimeUnit.MINUTES);
+        //查询缓存
+        String s = stringRedisTemplate.opsForValue().get(key);
+        //缓存未命中，直接返回null
+        if (StrUtil.isBlank(s))
             return null;
+
+        //缓存命中，检查是否过期
+        RedisData redisData = JSONUtil.toBean(s, RedisData.class);
+        LocalDateTime expireTime = redisData.getExpireTime();
+        Shop shop = JSONUtil.toBean((JSONObject) redisData.getData(), Shop.class);
+
+        //如果缓存未过期，直接返回
+        if (expireTime.isAfter(LocalDateTime.now()))
+            return shop;
+
+        //如果缓存过期了，尝试获取锁
+        boolean tryLock = tryLock(RedisConstants.LOCK_SHOP_KEY + id);
+        //如果获取锁成功，先做double check，如果确实需要更新缓存，那么更新缓存
+        if (tryLock)
+        {
+            //先做double check
+            //查询缓存
+            s = stringRedisTemplate.opsForValue().get(key);
+
+            //缓存命中，检查是否过期
+            redisData = JSONUtil.toBean(s, RedisData.class);
+            expireTime = redisData.getExpireTime();
+            Shop shop1 = JSONUtil.toBean((JSONObject) redisData.getData(), Shop.class);
+
+            //如果缓存未过期，直接返回
+            if (expireTime.isAfter(LocalDateTime.now()))
+                return shop1;
+
+            try {
+                //开启独立线程重建缓存
+                CACHE_REBUILD_EXCUTER.submit(() -> {
+                   saveShop2Redis(id, 30L);
+                });
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            } finally {
+                //释放锁
+                Unlock(RedisConstants.LOCK_SHOP_KEY + id);
+            }
         }
 
-        Map<String, Object> stringObjectMap = BeanUtil.beanToMap(shop, new HashMap<>(), CopyOptions.create()
-                .ignoreNullValue().setFieldValueEditor((field, value) ->{
-                    if (value == null)
-                        return null;
-                    return value.toString();
-                }));
-        stringRedisTemplate.opsForHash().putAll(key, stringObjectMap);
-        stringRedisTemplate.expire(key, RedisConstants.CACHE_SHOP_TTL, TimeUnit.MINUTES);
+        //如果获取锁失败，返回旧数据
         return shop;
     }
 
@@ -108,7 +134,7 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
         Shop shop = getById(id);
         RedisData redisData = new RedisData();
         redisData.setData(shop);
-        redisData.setExpireTime(LocalDateTime.now().plusSeconds(duration));
+        redisData.setExpireTime(LocalDateTime.now().plusMinutes(duration));
         stringRedisTemplate.opsForValue().set(key, JSONUtil.toJsonStr(redisData));
     }
 

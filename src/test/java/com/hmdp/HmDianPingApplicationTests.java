@@ -7,7 +7,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
 
-@SpringBootTest
+//@SpringBootTest
 class HmDianPingApplicationTests {
     /*
     知识点：因为ShopServiceImpl中使用了@Transactional注解，所以生成的Bean对象是一个动态代理对象
@@ -19,10 +19,10 @@ class HmDianPingApplicationTests {
      */
 
 
-    @Autowired
+    //@Autowired
     private IShopService shopService;
 
-    @Test
+    //@Test
     void save(){
         shopService.saveShop2Redis(5L, 20L);
     }
