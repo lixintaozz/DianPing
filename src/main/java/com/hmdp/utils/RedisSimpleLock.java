@@ -10,7 +10,7 @@ public class RedisSimpleLock implements ILock{
     private StringRedisTemplate stringRedisTemplate;
     private String name;
 
-    private String id_prefix = UUID.randomUUID().toString(true) + "-";
+    private static final String id_prefix = UUID.randomUUID().toString(true) + "-";
 
     private static final String lock_prefix = "lock:";
 
