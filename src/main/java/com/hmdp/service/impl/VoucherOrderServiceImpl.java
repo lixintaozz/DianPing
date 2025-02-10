@@ -8,9 +8,11 @@ import com.hmdp.service.ISeckillVoucherService;
 import com.hmdp.service.IVoucherOrderService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.hmdp.utils.RedisIDWorker;
+import com.hmdp.utils.RedisSimpleLock;
 import com.hmdp.utils.UserHolder;
 import org.springframework.aop.framework.AopContext;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,6 +31,9 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
 
     @Autowired
     private ISeckillVoucherService iSeckillVoucherService;
+
+    @Autowired
+    private StringRedisTemplate stringRedisTemplate;
 
     @Autowired
     private RedisIDWorker redisIDWorker;
@@ -53,13 +58,23 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
 
         //5. 检查用户是否已经购买过该秒杀券
         Long userId = UserHolder.getUser().getId();
+        //创建锁对象
+        RedisSimpleLock redisSimpleLock = new RedisSimpleLock(stringRedisTemplate, "order:" +userId);
+        //尝试获取锁
+        boolean tryLock = redisSimpleLock.tryLock(10);
+        //如果获取锁失败，直接返回错误信息
+        if (!tryLock)
+            return Result.fail("禁止用户重复购票！");
 
-        //这里使用userId.toString().intern()是为了保证能够锁住同一个对象
-        synchronized (userId.toString().intern()) {
-            //先获取代理对象，然后执行函数
-            //知识点：Spring的代理对象只在类外部生效，而在类的内部使用的还是原本的类并非代理对象，所以这里要手动获取代理对象
+        //先获取代理对象，然后执行函数
+        //知识点：Spring的代理对象只在类外部生效，而在类的内部使用的还是原本的类并非代理对象，所以这里要手动获取代理对象
+        try {
             IVoucherOrderService currentProxy = (IVoucherOrderService) AopContext.currentProxy();
             return currentProxy.CreateOrder(voucherId, userId);
+        } catch (IllegalStateException e) {
+            throw new RuntimeException(e);
+        } finally {
+            redisSimpleLock.unlock();
         }
     }
 
