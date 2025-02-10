@@ -61,7 +61,7 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
         //创建锁对象
         RedisSimpleLock redisSimpleLock = new RedisSimpleLock(stringRedisTemplate, "order:" +userId);
         //尝试获取锁
-        boolean tryLock = redisSimpleLock.tryLock(10);
+        boolean tryLock = redisSimpleLock.tryLock(100);
         //如果获取锁失败，直接返回错误信息
         if (!tryLock)
             return Result.fail("禁止用户重复购票！");
