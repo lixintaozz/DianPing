@@ -10,6 +10,8 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.hmdp.utils.RedisIDWorker;
 import com.hmdp.utils.RedisSimpleLock;
 import com.hmdp.utils.UserHolder;
+import org.redisson.api.RLock;
+import org.redisson.api.RedissonClient;
 import org.springframework.aop.framework.AopContext;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -37,6 +39,9 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
 
     @Autowired
     private RedisIDWorker redisIDWorker;
+
+    @Autowired
+    private RedissonClient redissonClient;
     /**
      * 秒杀券下单
      * @param voucherId
@@ -59,9 +64,11 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
         //5. 检查用户是否已经购买过该秒杀券
         Long userId = UserHolder.getUser().getId();
         //创建锁对象
-        RedisSimpleLock redisSimpleLock = new RedisSimpleLock(stringRedisTemplate, "order:" +userId);
+        //RedisSimpleLock redisSimpleLock = new RedisSimpleLock(stringRedisTemplate, "order:" +userId);
+        RLock rLock = redissonClient.getLock("order:" + userId);
+
         //尝试获取锁
-        boolean tryLock = redisSimpleLock.tryLock(100);
+        boolean tryLock = rLock.tryLock();
         //如果获取锁失败，直接返回错误信息
         if (!tryLock)
             return Result.fail("禁止用户重复购票！");
@@ -74,7 +81,7 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
         } catch (IllegalStateException e) {
             throw new RuntimeException(e);
         } finally {
-            redisSimpleLock.unlock();
+            rLock.unlock();
         }
     }
 
