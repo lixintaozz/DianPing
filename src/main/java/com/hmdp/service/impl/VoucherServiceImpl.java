@@ -55,6 +55,6 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, Voucher> impl
         seckillVoucherService.save(seckillVoucher);
 
         //将秒杀券的库存信息保存到redis
-        stringRedisTemplate.opsForValue().set(RedisConstants.SECKILL_STOCK_KEY, voucher.getStock().toString());
+        stringRedisTemplate.opsForValue().set(RedisConstants.SECKILL_STOCK_KEY + voucher.getId(), voucher.getStock().toString());
     }
 }

@@ -14,11 +14,16 @@ import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
 import org.springframework.aop.framework.AopContext;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Collections;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
 
 /**
  * <p>
@@ -42,12 +47,61 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
 
     @Autowired
     private RedissonClient redissonClient;
+
+    //创建阻塞队列
+    private BlockingQueue<VoucherOrder> blockingQueue = new ArrayBlockingQueue<>(1024 * 1024);
+
+    private static final DefaultRedisScript<Long> RedisScript = new DefaultRedisScript<>();
+    static {
+        RedisScript.setLocation(new ClassPathResource("seckill.lua"));
+        RedisScript.setResultType(Long.class);
+    }
+
+
+
     /**
-     * 秒杀券下单
+     * 秒杀券下单（优化版）
      * @param voucherId
      * @return
      */
     @Override
+    public Result seckillVoucher(Long voucherId) {
+        Long userId = UserHolder.getUser().getId();
+
+        //1. 调用Lua脚本判断能否下单
+        Long resultVal = stringRedisTemplate.execute(
+                RedisScript,
+                Collections.emptyList(),
+                userId.toString(),
+                voucherId.toString()
+        );
+
+        //2. 如果无法下单，那么直接返回错误信息
+        if (resultVal != 0)
+            return Result.fail(resultVal == 1 ? "库存不足！" : "不能重复下单！");
+
+        //3. 如果下单成功，那么生成订单信息，并将其加入阻塞队列
+        VoucherOrder voucherOrder = new VoucherOrder();
+        voucherOrder.setVoucherId(voucherId);
+        voucherOrder.setUserId(userId);
+        Long voucherOrderId = redisIDWorker.nextId("voucherOrder");
+        voucherOrder.setId(voucherOrderId);
+        blockingQueue.add(voucherOrder);
+
+        //4. 返回订单id
+        return Result.ok(voucherOrderId);
+    }
+
+
+
+
+
+    /**
+     * 秒杀券下单（未优化版）
+     * @param voucherId
+     * @return
+     */
+/*    @Override
     public Result seckillVoucher(Long voucherId) {
         //1. 查询优惠券信息
         SeckillVoucher seckillVoucher = iSeckillVoucherService.getById(voucherId);
@@ -83,7 +137,7 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
         } finally {
             rLock.unlock();
         }
-    }
+    }*/
 
     @Transactional
     public Result CreateOrder(Long voucherId, Long userId) {
