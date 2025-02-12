@@ -64,30 +64,40 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
 
         @Override
         public void run() {
-            //1. 首先从阻塞队列取出订单
-            VoucherOrder voucherOrder = null;
-            try {
-                voucherOrder = blockingQueue.take();
-            } catch (InterruptedException e) {
-                throw new RuntimeException(e);
-            }
-            //2. 然后创建分布式锁
-            RLock redissonClientLock = redissonClient.getLock("VoucherOrder:Submit");
-            //3. 尝试获取锁
-            boolean tryLock = false;
-            try {
-                tryLock = redissonClientLock.tryLock(5, TimeUnit.SECONDS);
-            } catch (InterruptedException e) {
-                throw new RuntimeException(e);
-            }
-            //4. 如果获取锁成功
-            if (tryLock) {
-                //5. 就将订单数据提交到数据库
+            while (true){
+                //1. 首先尝试从阻塞队列取出订单
+                VoucherOrder voucherOrder = null;
                 try {
-                    currentProxy.CreateOrder(voucherOrder);
-                } finally {
-                    //6. 释放锁
-                    redissonClientLock.unlock();
+                    voucherOrder = blockingQueue.take();
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
+                //2. 然后创建分布式锁
+                RLock redissonClientLock = redissonClient.getLock("VoucherOrder:Submit");
+                //3. 尝试获取锁
+                boolean tryLock = false;
+                try {
+                    tryLock = redissonClientLock.tryLock(5, TimeUnit.SECONDS);
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
+                //4. 如果获取锁成功
+                if (tryLock) {
+                    //5. 就将订单数据提交到数据库
+                    try {
+                        currentProxy.CreateOrder(voucherOrder);
+                    } finally {
+                        //6. 释放锁
+                        redissonClientLock.unlock();
+                    }
+                }else {
+                    //7. 否则将订单数据重新加入阻塞队列
+                    blockingQueue.add(voucherOrder);
+                    try {
+                        Thread.sleep(2000);
+                    } catch (InterruptedException e) {
+                        throw new RuntimeException(e);
+                    }
                 }
             }
         }
