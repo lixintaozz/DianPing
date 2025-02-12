@@ -3,6 +3,7 @@ package com.hmdp.service;
 import com.hmdp.dto.Result;
 import com.hmdp.entity.Blog;
 import com.baomidou.mybatisplus.extension.service.IService;
+import io.swagger.models.auth.In;
 
 /**
  * <p>
@@ -20,4 +21,13 @@ public interface IBlogService extends IService<Blog> {
      * @return
      */
     Result queryBlogById(Long id);
+
+    /**
+     * 点赞博客
+     * @param id
+     * @return
+     */
+    Result likeBlog(Long id);
+
+    Result queryHotBlog(Integer current);
 }
