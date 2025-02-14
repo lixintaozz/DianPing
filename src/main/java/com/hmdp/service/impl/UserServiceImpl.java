@@ -14,15 +14,21 @@ import com.hmdp.mapper.UserMapper;
 import com.hmdp.service.IUserService;
 import com.hmdp.utils.RedisConstants;
 import com.hmdp.utils.RegexUtils;
+import com.hmdp.utils.UserHolder;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.cache.CacheProperties;
+import org.springframework.data.redis.connection.BitFieldSubCommands;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.stereotype.Service;
 
 import javax.servlet.http.HttpSession;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
@@ -102,5 +108,66 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
 
         //5. 返回ok
         return Result.ok(key);
+    }
+
+    /**
+     * 用户签到
+     * @return
+     */
+    @Override
+    public Result sign() {
+        //1. 获取当前用户
+        Long userId = UserHolder.getUser().getId();
+        //2. 获取当前日期
+        LocalDateTime now = LocalDateTime.now();
+        String keySuffix = now.format(DateTimeFormatter.ofPattern(":yyyy-MM"));
+        //3. 获取当前日期是本月第几天
+        int offset = now.getDayOfMonth();
+        //4. 设置redis中数据
+        String key = RedisConstants.USER_SIGN_KEY + userId + keySuffix;
+        stringRedisTemplate.opsForValue().setBit(key, offset - 1, true);
+        //5. 返回
+        return Result.ok();
+    }
+
+    /**
+     * 统计用户连续签到天数
+     * @return
+     */
+    @Override
+    public Result signCount() {
+        //1. 获取当前用户
+        Long userId = UserHolder.getUser().getId();
+        //2. 获取当前日期
+        LocalDateTime now = LocalDateTime.now();
+        String keySuffix = now.format(DateTimeFormatter.ofPattern(":yyyy-MM"));
+        //3. 获取当前日期是本月第几天
+        int offset = now.getDayOfMonth();
+        //5. 去redis中获取数据
+        String key = RedisConstants.USER_SIGN_KEY + userId + keySuffix;
+        List<Long> list = stringRedisTemplate.opsForValue().bitField
+                (key, BitFieldSubCommands.create().
+                        get(BitFieldSubCommands.BitFieldType.unsigned(offset)).valueAt(0));
+
+        if (list == null || list.isEmpty())
+            return Result.ok(0);
+
+        Long bitMap = list.get(0);
+        if (bitMap == null || bitMap == 0)
+            return Result.ok(0);
+
+        int cnt = 0;
+        while (true)
+        {
+            if ((bitMap & 1) == 0) {
+                break;
+            }else
+            {
+                ++ cnt;
+                bitMap >>>= 1;
+            }
+        }
+
+        return Result.ok(cnt);
     }
 }

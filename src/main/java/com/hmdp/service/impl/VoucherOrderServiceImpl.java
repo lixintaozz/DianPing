@@ -117,7 +117,8 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
      * @return
      */
     @Override
-    public Result seckillVoucher(Long voucherId) {
+    public Result
+    seckillVoucher(Long voucherId) {
         Long userId = UserHolder.getUser().getId();
 
         //1. 调用Lua脚本判断能否下单
