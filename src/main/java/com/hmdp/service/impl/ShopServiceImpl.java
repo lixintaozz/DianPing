@@ -7,6 +7,7 @@ import cn.hutool.core.util.BooleanUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.hmdp.dto.Result;
 import com.hmdp.entity.RedisData;
 import com.hmdp.entity.Shop;
@@ -14,15 +15,18 @@ import com.hmdp.mapper.ShopMapper;
 import com.hmdp.service.IShopService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.hmdp.utils.RedisConstants;
+import com.hmdp.utils.SystemConstants;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.geo.*;
+import org.springframework.data.redis.connection.RedisGeoCommands;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.bind.annotation.RequestParam;
 
 import java.time.LocalDateTime;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -136,6 +140,53 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
         redisData.setData(shop);
         redisData.setExpireTime(LocalDateTime.now().plusMinutes(duration));
         stringRedisTemplate.opsForValue().set(key, JSONUtil.toJsonStr(redisData));
+    }
+
+    @Override
+    public Result queryShopByType(Integer typeId, Integer current, Double x, Double y) {
+        //1.如果没有输入地理坐标，那么按照原来的分页查询即可
+        if (x == null || y == null) {
+            // 根据类型分页查询
+            Page<Shop> page = query()
+                    .eq("type_id", typeId)
+                    .page(new Page<>(current, SystemConstants.DEFAULT_PAGE_SIZE));
+            // 返回数据
+            return Result.ok(page.getRecords());
+        }
+        //2. 否则，首先计算分页信息
+        int from = (current - 1) * SystemConstants.DEFAULT_PAGE_SIZE;
+        int end = current * SystemConstants.DEFAULT_PAGE_SIZE;
+
+        //3. 然后根据typeId去redis中查询出来店铺的相关信息
+        String key = RedisConstants.SHOP_GEO_KEY + typeId;
+        GeoResults<RedisGeoCommands.GeoLocation<String>> geoLocationGeoResults = stringRedisTemplate.opsForGeo().
+                radius(key, new Circle(new Point(x, y), new Distance(5, Metrics.KILOMETERS)),
+                        RedisGeoCommands.GeoRadiusCommandArgs.newGeoRadiusArgs().includeDistance().limit(end));
+        if (geoLocationGeoResults == null)
+            return Result.ok(Collections.emptyList());
+
+
+        //4. 对于查询到的分页店铺信息进行截取
+        List<GeoResult<RedisGeoCommands.GeoLocation<String>>> results = geoLocationGeoResults.getContent();
+        if (results.size() <= from)
+            //没有内容了，直接结束
+            return Result.ok(Collections.emptyList());
+        List<Long> ids = new ArrayList<>();
+        Map<Long, Distance> distanceMap = new HashMap<>();
+        results.stream().skip(from).forEach(geoLocationGeoResult -> {
+            Long shopId = Long.valueOf(geoLocationGeoResult.getContent().getName());
+            ids.add(shopId);
+            distanceMap.put(shopId, geoLocationGeoResult.getDistance());
+        });
+        //5. 根据shopId去查询商铺的有关信息并设置其地理坐标信息，注意这里要按照顺序获取order by field
+        String idStr = StrUtil.join(",", ids);
+        List<Shop> shops = lambdaQuery().in(Shop::getId, ids).last("order by field(id," + idStr + ")").list();
+        for (Shop shop : shops) {
+            shop.setDistance(distanceMap.get(shop.getId()).getValue() * 1000);
+        }
+        //6. 返回结果
+
+        return Result.ok(shops);
     }
 
     /**

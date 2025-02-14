@@ -34,4 +34,6 @@ public interface IShopService extends IService<Shop> {
      * @param duration
      */
     void saveShop2Redis(Long id, Long duration);
+
+    Result queryShopByType(Integer typeId, Integer current, Double x, Double y);
 }
