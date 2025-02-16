@@ -216,6 +216,8 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
             }
 
             //Double check，如果此时缓存已经存在，则无需再重建缓存
+            //Double check的原因：获取锁后，再次检查缓存数据是否已被其他线程重建（可能是其他线程在
+            // 我们获取锁的过程中重建了缓存）。如果缓存已经存在，则直接返回，不进行重建；如果缓存不存在，则开始重建缓存。
             entries = stringRedisTemplate.opsForHash().entries(key);
             if (!entries.isEmpty())
             {
