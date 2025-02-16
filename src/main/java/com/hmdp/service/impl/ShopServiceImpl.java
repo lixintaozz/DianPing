@@ -211,7 +211,7 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
         try {
             boolean tryLock = tryLock(mutex);
             if (!tryLock) {
-                Thread.sleep(50);
+                Thread.sleep(50);   //这里可能会抛异常，如果finally中释放锁的话，会有问题
                 return queryWithThrough(id);
             }
 
@@ -248,7 +248,7 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
             throw new RuntimeException(e);
         }
 
-        Unlock(mutex);
+        Unlock(mutex);    //这里没有加入finally中是因为递归的实现存在逻辑问题，正常情况下是需要加入finally块中的
         return shop;
     }
 
